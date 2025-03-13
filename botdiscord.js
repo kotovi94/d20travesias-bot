@@ -294,5 +294,39 @@ client.on('messageCreate', async message => {
         message.reply(getRandomElement(confirmationMessages));
     }
 });
+client.on('messageCreate', async message => {
+    if (!message.content.startsWith(prefix) || message.author.bot) return;
+
+    const args = message.content.slice(prefix.length).trim().split(/ +/);
+    const command = args.shift().toLowerCase();
+
+    if (command === 'help') {
+        const helpMessage = `🎭 **Comandos disponibles:**  
+        
+📜 **Misiones**  
+\`!quest\` - Genera una misión aleatoria y la publica en el tablón de anuncios.  
+
+🎶 **Música**  
+\`!join\` - El bardo se une a tu canal de voz.  
+\`!play <URL>\` - Añade una canción a la cola y comienza a tocar.  
+\`!pause\` - Pausa la canción actual.  
+\`!resume\` - Reanuda la música pausada.  
+\`!skip\` - Salta la canción actual.  
+\`!stop\` - Detiene la música y vacía la cola.  
+\`!leave\` - El bardo se retira del canal de voz.  
+
+*¡Que las melodías y las historias os guíen en vuestras aventuras!* 🎶⚔️`;
+
+        try {
+            // Enviar el mensaje privado al usuario
+            await message.author.send(helpMessage);
+            // Confirmar en el chat que el mensaje fue enviado por privado
+            message.reply("📜 *He enviado un pergamino con la lista de comandos a tus mensajes privados.*");
+        } catch (error) {
+            console.error("⚠️ No pude enviar un mensaje privado al usuario:", error);
+            message.reply("⚠️ *Parece que no puedo enviarte mensajes privados. Revisa tu configuración de privacidad.*");
+        }
+    }
+});
 
 client.login(process.env.TOKEN);
