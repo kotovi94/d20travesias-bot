@@ -1,4 +1,4 @@
-.env
-temp/
-shorts_temp.json
+node_modules/
 package-lock.json
+.env
+shorts_temp.json
