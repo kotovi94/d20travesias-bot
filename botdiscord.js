@@ -356,7 +356,7 @@ client.on('messageCreate', async message => {
 
 const fs = require('fs');
 const path = require('path');
-const axios = require('axios');
+
 
 // 🎯 CONFIGURACIÓN
 const DISCORD_CHANNEL_ID = "1181358348726186015"; // Canal de Discord donde se publicarán los Shorts
