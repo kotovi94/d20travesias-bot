@@ -300,7 +300,7 @@ client.on('messageCreate', async message => {
     const args = message.content.slice(prefix.length).trim().split(/ +/);
     const command = args.shift().toLowerCase();
 
-    if (command === 'help') {
+    if (command === 'commands') {
         const helpMessage = `🎭 **Comandos disponibles:**  
         
 📜 **Misiones**  
@@ -328,5 +328,30 @@ client.on('messageCreate', async message => {
         }
     }
 });
+client.once('ready', async () => {
+    console.log(`🛡️ El bardo ${client.user.tag} está listo para cantar historias!`);
+
+    const channelId = "1181358348726186015"; // Canal donde se publicará el mensaje
+    const channel = await client.channels.fetch(channelId);
+
+    if (channel) {
+        channel.send(`📜 ¡Saludos aventureros! Soy **${client.user.username}**, vuestro fiel bardo. 🎶  
+
+Para ver la lista de mis melodías y poderes, usa \`!commands\`. ⚔️`);
+    } else {
+        console.error("⚠️ No se pudo encontrar el canal de anuncios.");
+    }
+});
+
+client.on('messageCreate', async message => {
+    if (message.author.bot) return;
+
+    // Si el mensaje contiene "comando" o "comandos" (en cualquier parte del texto)
+    if (message.content.toLowerCase().includes("comandos") || message.content.toLowerCase().includes("comando")) {
+        message.reply(`📜 *Si buscas la lista de comandos, usa \`!commands\`. 🎶* - **${client.user.username}**, el trovador del reino.`);
+    }
+});
+
+
 
 client.login(process.env.TOKEN);
