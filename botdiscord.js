@@ -2,6 +2,7 @@ require('dotenv').config();
 const { Client, GatewayIntentBits } = require('discord.js');
 const { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus } = require('@discordjs/voice');
 const { spawn } = require('child_process');
+const axios = require('axios');
 
 const client = new Client({
     intents: [
@@ -353,5 +354,98 @@ client.on('messageCreate', async message => {
 });
 
 
+const fs = require('fs');
+const path = require('path');
+const axios = require('axios');
+
+// 🎯 CONFIGURACIÓN
+const DISCORD_CHANNEL_ID = "1181358348726186015"; // Canal de Discord donde se publicarán los Shorts
+const YOUTUBE_CHANNEL_ID = "UCi61VqIS3WlPOhcBbmps7Sg"; // ID del canal "Doble 20"
+const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY; // Clave de API de YouTube
+const CHECK_INTERVAL = 24 * 60 * 60 * 1000; // Revisar cada 24 horas
+const TEMP_STORAGE_TIME = 24 * 60 * 60 * 1000; // Tiempo antes de eliminar Shorts (24h)
+
+// 📜 Archivo donde se almacenan temporalmente los Shorts publicados
+const SHORTS_FILE = path.join(__dirname, 'shorts_temp.json');
+
+// 📜 Cargar Shorts ya publicados si existe el archivo
+let postedVideos = new Map();
+if (fs.existsSync(SHORTS_FILE)) {
+    const data = fs.readFileSync(SHORTS_FILE, 'utf8');
+    postedVideos = new Map(JSON.parse(data));
+}
+
+// 🚀 Función para limpiar Shorts que tengan más de 24 horas
+function cleanOldShorts() {
+    const now = Date.now();
+    for (let [videoId, timestamp] of postedVideos.entries()) {
+        if (now - timestamp > TEMP_STORAGE_TIME) {
+            postedVideos.delete(videoId);
+        }
+    }
+    fs.writeFileSync(SHORTS_FILE, JSON.stringify([...postedVideos]), 'utf8');
+    console.log("🗑️ Se han eliminado los Shorts antiguos.");
+}
+
+// 🔍 Función para buscar nuevos Shorts
+async function checkForNewShorts(client) {
+    try {
+        console.log("🔍 Buscando nuevos Shorts de Doble 20...");
+
+        const url = `https://www.googleapis.com/youtube/v3/search?key=${YOUTUBE_API_KEY}&channelId=${YOUTUBE_CHANNEL_ID}&part=snippet,id&order=date&maxResults=10`;
+        const response = await axios.get(url);
+        
+        const videos = response.data.items;
+        if (!videos || videos.length === 0) return;
+
+        // 🔍 Filtrar solo Shorts (videos con "Short" en el título o duración menor a 60s)
+        const shorts = videos.filter(video => video.id.videoId && video.snippet.title.toLowerCase().includes("short"));
+
+        if (shorts.length === 0) {
+            console.log("⏳ No hay nuevos Shorts en las últimas 24 horas.");
+            return;
+        }
+
+        const discordChannel = await client.channels.fetch(DISCORD_CHANNEL_ID);
+        if (!discordChannel) {
+            console.error("⚠️ No se pudo encontrar el canal de Discord.");
+            return;
+        }
+
+        for (const short of shorts) {
+            const videoId = short.id.videoId;
+            if (postedVideos.has(videoId)) continue; // Si ya fue publicado, lo ignoramos
+
+            const videoTitle = short.snippet.title;
+            const videoUrl = `https://www.youtube.com/shorts/${videoId}`;
+
+            // 📜 Publicar en Discord
+            await discordChannel.send(`📺 **¡Nuevo Short de D&D en Doble 20!** 🎲✨\n📜 **${videoTitle}**\n🔗 ${videoUrl}`);
+
+            // 📌 Guardar la URL con la fecha actual
+            postedVideos.set(videoId, Date.now());
+        }
+
+        // Guardar en el archivo temporal
+        fs.writeFileSync(SHORTS_FILE, JSON.stringify([...postedVideos]), 'utf8');
+
+        console.log(`✅ Se han publicado ${shorts.length} Shorts en Discord.`);
+
+    } catch (error) {
+        console.error("⚠️ Error al verificar YouTube:", error);
+    }
+}
+
+// ⏳ Revisar YouTube cada 24 horas y limpiar Shorts antiguos
+setInterval(() => {
+    checkForNewShorts(client);
+    cleanOldShorts();
+}, CHECK_INTERVAL);
+
+client.once('ready', () => {
+    console.log(`📡 Monitoreando YouTube cada 24 horas en ${client.user.tag}...`);
+    checkForNewShorts(client);
+    cleanOldShorts();
+});
 
 client.login(process.env.TOKEN);
