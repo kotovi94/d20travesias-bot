@@ -1,0 +1,4 @@
+.env
+temp/
+shorts_temp.json
+package-lock.json
