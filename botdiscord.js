@@ -2,9 +2,6 @@ require('dotenv').config();
 const { Client, GatewayIntentBits } = require('discord.js');
 const { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus } = require('@discordjs/voice');
 const { spawn } = require('child_process');
-const axios = require('axios');
-const fs = require('fs');
-const path = require('path');
 
 const client = new Client({
     intents: [
@@ -18,93 +15,15 @@ const client = new Client({
 const prefix = "!";
 const queue = new Map(); // 🎵 Cola de reproducción global
 
-// 📡 Canal de YouTube y Discord para Shorts
-const DISCORD_CHANNEL_ID = "1181358348726186015"; 
-const YOUTUBE_CHANNEL_ID = "UCi61VqIS3WlPOhcBbmps7Sg";
-const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
-const CHECK_INTERVAL = 24 * 60 * 60 * 1000; // 24 horas
-
-// 📂 Almacenamiento temporal de Shorts
-const SHORTS_FILE = path.join(__dirname, 'shorts_temp.json');
-let postedVideos = new Set();
-
-// 📂 Cargar Shorts guardados
-if (fs.existsSync(SHORTS_FILE)) {
-    postedVideos = new Set(JSON.parse(fs.readFileSync(SHORTS_FILE, 'utf8')));
-}
-
-// 📌 Limpiar Shorts antiguos
-function cleanOldShorts() {
-    postedVideos.clear();
-    fs.writeFileSync(SHORTS_FILE, JSON.stringify([...postedVideos]), 'utf8');
-    console.log("🗑️ Se han eliminado los Shorts antiguos.");
-}
-
-// 🔍 Revisar nuevos Shorts en YouTube
-async function checkForNewShorts(client) {
-    try {
-        console.log("🔍 Buscando nuevos Shorts de Doble 20...");
-
-        const url = `https://www.googleapis.com/youtube/v3/search?key=${YOUTUBE_API_KEY}&channelId=${YOUTUBE_CHANNEL_ID}&part=snippet,id&order=date&maxResults=10`;
-        const response = await axios.get(url);
-
-        if (!response.data.items || response.data.items.length === 0) {
-            console.log("⏳ No hay nuevos Shorts en las últimas 24 horas.");
-            return;
-        }
-
-        const shorts = response.data.items.filter(video => video.id.videoId && video.snippet.title.toLowerCase().includes("short"));
-
-        if (shorts.length === 0) {
-            console.log("⏳ No hay nuevos Shorts en las últimas 24 horas.");
-            return;
-        }
-
-        const discordChannel = await client.channels.fetch(DISCORD_CHANNEL_ID);
-        if (!discordChannel) {
-            console.error("⚠️ No se pudo encontrar el canal de Discord.");
-            return;
-        }
-
-        for (const short of shorts) {
-            const videoId = short.id.videoId;
-            if (postedVideos.has(videoId)) continue;
-
-            const videoTitle = short.snippet.title;
-            const videoUrl = `https://www.youtube.com/shorts/${videoId}`;
-
-            await discordChannel.send(`📺 **¡Nuevo Short de D&D en Doble 20!** 🎲✨\n📜 **${videoTitle}**\n🔗 ${videoUrl}`);
-
-            postedVideos.add(videoId);
-        }
-
-        fs.writeFileSync(SHORTS_FILE, JSON.stringify([...postedVideos]), 'utf8');
-
-        console.log(`✅ Se han publicado ${shorts.length} Shorts en Discord.`);
-
-    } catch (error) {
-        console.error("⚠️ Error al verificar YouTube:", error);
-    }
-}
-
-// ⏳ Revisar YouTube cada 24 horas
-setInterval(() => {
-    checkForNewShorts(client);
-    cleanOldShorts();
-}, CHECK_INTERVAL);
-
-// 🎭 Mensaje de inicio
-client.once('ready', async () => {
-    console.log(`📡 Monitoreando YouTube cada 24 horas en ${client.user.tag}...`);
-    checkForNewShorts(client);
-    cleanOldShorts();
-});
-
-// 🔄 Función para respuestas aleatorias
+// 🔄 Función para elegir una respuesta aleatoria
 function getRandomResponse(responses) {
     return responses[Math.floor(Math.random() * responses.length)];
 }
 
+// 🎭 Mensaje de inicio
+client.once('ready', async () => {
+    console.log(`🎭 El bardo ${client.user.tag} está listo para tocar!`);
+});
 
 // 🎤 Conectar el bot al canal de voz y manejar la cola de música
 client.on('messageCreate', async message => {
@@ -132,7 +51,13 @@ client.on('messageCreate', async message => {
             queue.set(guildId, serverQueue);
             serverQueue.connection.subscribe(serverQueue.player);
         }
-        message.reply("🎶 ¡El bardo ha llegado! Preparad vuestros oídos para canciones épicas.");
+
+        const joinResponses = [
+            "🎻 ¡Que resuenen las cuerdas y el espíritu se eleve! ¡Estoy listo para tocar!",
+            "📯 ¡El bardo ha llegado! Preparad vuestros oídos para canciones épicas.",
+            "🎶 Entra el trovador, listo para llenar este lugar de armonías mágicas."
+        ];
+        message.reply(getRandomResponse(joinResponses));
     }
 
     // 🎵 Añadir canción a la cola y reproducir si no hay nada sonando
@@ -141,49 +66,77 @@ client.on('messageCreate', async message => {
         if (!args[0]) return message.reply("📜 ¡Un bardo necesita su partitura! Proporcióname un enlace de YouTube.");
 
         const url = args[0].split("&")[0];
-        serverQueue.songs.push(url); // 🔄 Se agrega a la cola
+        serverQueue.songs.push(url);
 
         if (serverQueue.player.state.status !== AudioPlayerStatus.Playing) {
             playSong(guildId);
         }
 
-        message.reply(`🎶 ¡Añadida a la cola! Usa \`!skip\` para avanzar.`);
+        const playResponses = [
+            "🎼 ¡Ah, esta melodía promete ser legendaria!",
+            "🎶 ¡Una nueva canción para los anales de la historia!",
+            "🎻 ¡Que comience el concierto! La música nos guiará."
+        ];
+        message.reply(getRandomResponse(playResponses));
     }
 
     // ⏸️ Pausar la música
     if (command === 'pause') {
         if (!serverQueue || !serverQueue.player) return message.reply("⚠️ ¡No hay melodía en el aire para pausar!");
         serverQueue.player.pause();
-        message.reply("⏸️ ¡El trovador toma un descanso!");
+
+        const pauseResponses = [
+            "⏸️ ¡Ah, un momento de respiro! Pero la música volverá.",
+            "🎼 ¡El trovador se toma un descanso, mas la historia no ha acabado!",
+            "📜 ¡La sinfonía espera! Pausando esta pieza con gracia."
+        ];
+        message.reply(getRandomResponse(pauseResponses));
     }
 
     // ▶️ Reanudar la música
     if (command === 'resume') {
         if (!serverQueue || !serverQueue.player) return message.reply("📜 ¡No hay canción en espera para continuar!");
         serverQueue.player.unpause();
-        message.reply("▶️ ¡El laúd vuelve a sonar!");
+
+        const resumeResponses = [
+            "▶️ ¡La música regresa, como un héroe de leyenda!",
+            "🎶 ¡El laúd vuelve a sonar! Preparaos para la siguiente estrofa.",
+            "🎻 ¡Que la melodía siga! No hay descanso para un bardo."
+        ];
+        message.reply(getRandomResponse(resumeResponses));
     }
 
-    // ⏭️ Saltar a la siguiente canción en la cola (corrige el loop infinito)
+    // ⏭️ Saltar a la siguiente canción en la cola
     if (command === 'skip') {
         if (!serverQueue || serverQueue.songs.length === 0) return message.reply("⏭️ ¡No hay canción que saltar!");
 
-        serverQueue.songs.shift(); // ❗ Saca la canción actual de la cola
+        serverQueue.songs.shift();
         if (serverQueue.songs.length === 0) {
-            serverQueue.songs.push(serverQueue.songs[0]); // 🔄 Si no hay más canciones, vuelve a agregar la última para que el loop siga
+            serverQueue.songs.push(serverQueue.songs[0]);
         }
-        serverQueue.player.stop(); // 🛑 Detiene la reproducción para forzar el cambio
+        serverQueue.player.stop();
 
-        message.reply("⏭️ ¡Saltando a la siguiente canción!");
+        const skipResponses = [
+            "⏭️ ¡Adelante con la próxima balada! Este cuento debe continuar.",
+            "🎭 ¡Saltamos esta historia para llegar a un nuevo acto!",
+            "🎼 ¡Siguiente canción! Que el festín de sonidos no termine."
+        ];
+        message.reply(getRandomResponse(skipResponses));
     }
 
-    // 🛑 Detener la música y limpiar la cola (sin desconectar)
+    // 🛑 Detener la música y limpiar la cola
     if (command === 'stop') {
         if (!serverQueue) return message.reply("🎭 ¡No hay nada que detener!");
 
         serverQueue.songs = [];
         serverQueue.player.stop();
-        message.reply("🛑 ¡El silencio cae como un telón en esta taberna!");
+
+        const stopResponses = [
+            "🛑 ¡El silencio cae como un telón en esta taberna!",
+            "🎭 ¡La canción ha terminado, pero la historia continúa!",
+            "🎻 Deteniendo la música... hasta que alguien pida otra ronda."
+        ];
+        message.reply(getRandomResponse(stopResponses));
     }
 
     // 🚪 Desconectar el bot del canal de voz
@@ -192,15 +145,13 @@ client.on('messageCreate', async message => {
 
         serverQueue.connection.destroy();
         queue.delete(guildId);
-        message.reply("📯 ¡El trovador parte en busca de nuevas canciones y viejas leyendas!");
-    }
 
-    // 📜 Mostrar la cola de canciones
-    if (command === 'queue') {
-        if (!serverQueue || serverQueue.songs.length === 0) return message.reply("📭 La cola está vacía, ¡añade una canción con `!play`!");
-
-        const songList = serverQueue.songs.map((song, index) => `${index + 1}. ${song}`).join('\n');
-        message.reply(`🎶 **Cola de reproducción:**\n${songList}`);
+        const leaveResponses = [
+            "👋 ¡El bardo se retira, pero volverá cuando la historia lo requiera!",
+            "🎭 ¡Mi acto ha terminado! Que las melodías os acompañen hasta la próxima.",
+            "📯 ¡El trovador parte en busca de nuevas canciones y viejas leyendas!"
+        ];
+        message.reply(getRandomResponse(leaveResponses));
     }
 });
 
@@ -209,7 +160,7 @@ async function playSong(guildId) {
     const serverQueue = queue.get(guildId);
     if (!serverQueue || serverQueue.songs.length === 0) return;
 
-    const songUrl = serverQueue.songs[0]; // ⏩ Siempre toma la primera de la cola
+    const songUrl = serverQueue.songs[0];
 
     try {
         const process = spawn('yt-dlp', ['-f', 'bestaudio', '--no-playlist', '-o', '-', songUrl], { stdio: ['ignore', 'pipe', 'ignore'] });
@@ -220,9 +171,8 @@ async function playSong(guildId) {
         serverQueue.player.once(AudioPlayerStatus.Idle, () => {
             process.kill();
 
-            // 🔄 Si hay más canciones en la cola, avanzamos
             if (serverQueue.songs.length > 1) {
-                serverQueue.songs.push(serverQueue.songs.shift()); // Mueve la canción actual al final
+                serverQueue.songs.push(serverQueue.songs.shift());
             }
 
             playSong(guildId);
@@ -232,61 +182,45 @@ async function playSong(guildId) {
         console.error(`❌ Error al reproducir: ${error.message}`);
     }
 }
-// 📜 Manejo de comandos
-client.on('messageCreate', async message => {
-    if (!message.content.startsWith(prefix) || message.author.bot) return;
 
-    const args = message.content.slice(prefix.length).trim().split(/ +/);
-    const command = args.shift()?.toLowerCase();
+const CANAL_DESTINO_ID = "1348784767629262921"; // 🔥 Canal donde se publican las misiones
+const DM_ROLE_ID = "1181336808907362405"; // 🎭 ID del rol del DM
+const ROLES_MENCIONAR = ["1181336919087530074", "1181337096343011451"]; // 🎭 IDs de roles mencionados (rolero, espectador)
 
-    if (command === 'commands') {
-        const helpMessage = `🎭 **Lista de Comandos:**  
-        
-🎶 **Música**  
-\`!join\` - El bardo se une al canal de voz.  
-\`!play <URL>\` - Añade una canción a la cola.  
-\`!pause\` - Pausa la música.  
-\`!resume\` - Reanuda la música.  
-\`!skip\` - Salta la canción actual.  
-\`!stop\` - Detiene la música y vacía la cola.  
-\`!leave\` - El bardo se retira del canal de voz.  
-\`!queue\` - Muestra la lista de canciones en la cola.  
-
-🔍 **YouTube Shorts**  
-El bot revisa cada 24h y publica Shorts de D&D automáticamente en el canal designado.  
-
-*🎶 ¡Deja que las melodías y las historias te guíen en tus aventuras! ⚔️*`;
-
-        try {
-            await message.author.send(helpMessage);
-            message.reply("📜 *He enviado la lista de comandos a tus mensajes privados.*");
-        } catch {
-            message.reply("⚠️ *No puedo enviarte mensajes privados. Verifica tu configuración.*");
-        }
-    }
-});
-client.on('messageCreate', async message => {
-    if (message.author.bot) return;
-
-    const lowerContent = message.content.toLowerCase();
-
-    const keywords = ["comando", "comandos", "ayuda", "musica", "música", "como usar", "que hacer", "qué hacer"];
-    if (keywords.some(word => lowerContent.includes(word))) {
-        message.reply(`📜 *Si buscas la lista de comandos, usa* \`!commands\` *🎶* - **${client.user.username}**, el trovador del reino.`);
-    }
-});
+// Mensajes aleatorios de introducción
+const MENSAJES_PUBLICACION = [
+    "📜 ¡Una nueva misión ha sido publicada! Todo aquel valiente capaz de superar las pruebas será bienvenido. ⚔️",
+    "🗺️ Se ha registrado una nueva expedición, ¿quién se atreve a emprender esta aventura?",
+    "🔮 Los destinos han sido revelados, y una nueva historia está por escribirse.",
+    "⚡ ¡Atención aventureros! Un nuevo desafío aguarda a aquellos lo suficientemente valientes para enfrentarlo."
+];
 
 client.on('messageCreate', async message => {
-    if (!message.content.startsWith(prefix) || message.author.bot) return;
+    if (message.author.bot) return; // Ignorar mensajes de bots
+    if (!message.member.roles.cache.has(DM_ROLE_ID)) return; // Solo el DM puede publicar misiones
 
-    const args = message.content.slice(prefix.length).trim().split(/ +/);
-    const command = args.shift()?.toLowerCase();
+    const canalDestino = await client.channels.fetch(CANAL_DESTINO_ID);
+    if (!canalDestino) return message.reply("⚠️ No puedo encontrar el canal de misiones.");
 
-    const validCommands = ["join", "play", "pause", "resume", "skip", "stop", "leave", "queue", "commands"];
+    // Buscar enlaces en el mensaje
+    const linkRegex = /(https?:\/\/[^\s]+)/g;
+    const enlaces = message.content.match(linkRegex);
+    const mensajeEnlaces = enlaces ? `🔗 **Enlaces:** ${enlaces.join(" ")}` : "";
 
-    if (!validCommands.includes(command)) {
-        message.reply(`⚠️ *Oh, viajero, ese conjuro no existe en mi grimorio. Prueba con* \`!commands\` *para descubrir mis melodías y secretos.* 🎶`);
-    }
+    // Crear la mención de roles
+    const rolesMencionados = ROLES_MENCIONAR.map(id => `<@&${id}>`).join(" ");
+
+    // Seleccionar un mensaje aleatorio
+    const mensajeIntro = MENSAJES_PUBLICACION[Math.floor(Math.random() * MENSAJES_PUBLICACION.length)];
+
+    // Construir el mensaje final
+    const mensajeFinal = `${mensajeIntro}\n\n📜 **Misión publicada por <@${message.author.id}> (DM):**\n${message.content}\n\n${mensajeEnlaces}\n\n🎭 ${rolesMencionados}`;
+
+    // Enviar la misión al canal de destino
+    await canalDestino.send(mensajeFinal);
+
+    // Confirmación al DM en el canal donde escribió
+    message.reply("✅ ¡Tu misión ha sido publicada en el tablón de anuncios!");
 });
 
 
