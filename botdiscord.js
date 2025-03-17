@@ -183,11 +183,12 @@ async function playSong(guildId) {
     }
 }
 
-const CANAL_DESTINO_ID = "1348784767629262921"; // 🔥 Canal donde se publican las misiones
-const DM_ROLE_ID = "1181336808907362405"; // 🎭 ID del rol del DM
-const ROLES_MENCIONAR = ["1181336919087530074", "1181337096343011451"]; // 🎭 IDs de roles mencionados (rolero, espectador)
+const CANAL_ORIGEN_ID = "1348784767629262921"; // 🏰 Canal donde los DMs escriben misiones
+const CANAL_DESTINO_ID = "1181356950211022988"; // 🔥 Canal donde se publican las misiones
+const DM_ROLE_ID = "1181336808907362405"; // 🎭 Rol del DM
+const ROLES_MENCIONAR = ["1181336919087530074", "1181337096343011451"]; // 🎭 Roles a etiquetar
 
-// Mensajes aleatorios de introducción
+// Mensajes de introducción aleatorios
 const MENSAJES_PUBLICACION = [
     "📜 ¡Una nueva misión ha sido publicada! Todo aquel valiente capaz de superar las pruebas será bienvenido. ⚔️",
     "🗺️ Se ha registrado una nueva expedición, ¿quién se atreve a emprender esta aventura?",
@@ -195,34 +196,57 @@ const MENSAJES_PUBLICACION = [
     "⚡ ¡Atención aventureros! Un nuevo desafío aguarda a aquellos lo suficientemente valientes para enfrentarlo."
 ];
 
+// Escuchar mensajes para el comando !quest
 client.on('messageCreate', async message => {
-    if (message.author.bot) return; // Ignorar mensajes de bots
-    if (!message.member.roles.cache.has(DM_ROLE_ID)) return; // Solo el DM puede publicar misiones
+    if (!message.content.startsWith(prefix) || message.author.bot) return;
+    
+    const args = message.content.slice(prefix.length).trim().split(/ +/);
+    const command = args.shift()?.toLowerCase();
+    
+    if (command === "quest") {
+        // Verificar que está en el canal correcto
+        if (message.channel.id !== CANAL_ORIGEN_ID) return message.reply("⚠️ Solo puedes escribir misiones en el canal designado.");
 
-    const canalDestino = await client.channels.fetch(CANAL_DESTINO_ID);
-    if (!canalDestino) return message.reply("⚠️ No puedo encontrar el canal de misiones.");
+        // Verificar si el usuario tiene el rol de DM
+        if (!message.member.roles.cache.has(DM_ROLE_ID)) return message.reply("⚠️ Solo los DMs pueden publicar misiones.");
 
-    // Buscar enlaces en el mensaje
-    const linkRegex = /(https?:\/\/[^\s]+)/g;
-    const enlaces = message.content.match(linkRegex);
-    const mensajeEnlaces = enlaces ? `🔗 **Enlaces:** ${enlaces.join(" ")}` : "";
+        message.reply("📜 Escribe la misión en el siguiente mensaje. **Tienes 10 minutos** para escribirla antes de que el tiempo expire.");
 
-    // Crear la mención de roles
-    const rolesMencionados = ROLES_MENCIONAR.map(id => `<@&${id}>`).join(" ");
+        // Esperar el siguiente mensaje del DM
+        const filter = response => response.author.id === message.author.id && response.channel.id === CANAL_ORIGEN_ID;
+        const collected = await message.channel.awaitMessages({ filter, max: 1, time: 600000, errors: ["time"] }).catch(() => null);
+        
+        if (!collected) {
+            return message.reply("⏳ **Tiempo agotado.** No se ha publicado ninguna misión. Escribe `!quest` de nuevo si deseas intentarlo.");
+        }
 
-    // Seleccionar un mensaje aleatorio
-    const mensajeIntro = MENSAJES_PUBLICACION[Math.floor(Math.random() * MENSAJES_PUBLICACION.length)];
+        const missionMessage = collected.first();
+        const missionText = missionMessage.content;
 
-    // Construir el mensaje final
-    const mensajeFinal = `${mensajeIntro}\n\n📜 **Misión publicada por <@${message.author.id}> (DM):**\n${message.content}\n\n${mensajeEnlaces}\n\n🎭 ${rolesMencionados}`;
+        const canalDestino = await client.channels.fetch(CANAL_DESTINO_ID);
+        if (!canalDestino) return message.reply("⚠️ No puedo encontrar el canal de misiones.");
 
-    // Enviar la misión al canal de destino
-    await canalDestino.send(mensajeFinal);
+        // Buscar enlaces en el mensaje
+        const linkRegex = /(https?:\/\/[^\s]+)/g;
+        const enlaces = missionText.match(linkRegex);
+        const mensajeEnlaces = enlaces ? `🔗 **Enlaces:** ${enlaces.join(" ")}` : "";
 
-    // Confirmación al DM en el canal donde escribió
-    message.reply("✅ ¡Tu misión ha sido publicada en el tablón de anuncios!");
+        // Crear la mención de roles
+        const rolesMencionados = ROLES_MENCIONAR.map(id => `<@&${id}>`).join(" ");
+
+        // Seleccionar un mensaje aleatorio
+        const mensajeIntro = MENSAJES_PUBLICACION[Math.floor(Math.random() * MENSAJES_PUBLICACION.length)];
+
+        // Construir el mensaje final
+        const mensajeFinal = `${mensajeIntro}\n\n📜 **Misión publicada por <@${message.author.id}> (DM):**\n${missionText}\n\n${mensajeEnlaces}\n\n🎭 ${rolesMencionados}`;
+
+        // Enviar la misión al canal de destino
+        await canalDestino.send(mensajeFinal);
+
+        // Confirmación al DM
+        message.reply("✅ **¡Tu misión ha sido publicada en el tablón de anuncios!**");
+    }
 });
-
 
 // 🔑 Iniciar bot
 client.login(process.env.TOKEN);
